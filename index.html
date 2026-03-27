@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>חיבורים — Grid Animation Demo</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f5f0e8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px;
+      gap: 24px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      color: #1a1a2e;
+      letter-spacing: 0.04em;
+    }
+
+    p.subtitle {
+      color: #555;
+      font-size: 0.95rem;
+      text-align: center;
+      max-width: 420px;
+    }
+
+    /* ── Grid container ───────────────────────────────────────────── */
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      width: min(520px, 100%);
+    }
+
+    /* ── Grid item (the element wrapGrid watches) ─────────────────── */
+    .card {
+      /* wrapGrid requires position:relative so transforms work correctly */
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+      border-radius: 10px;
+      aspect-ratio: 1 / 0.85;
+    }
+
+    /* ── Inner wrapper — required by wrapGrid for counter-scaling ─── */
+    .card-inner {
+      width: 100%;
+      height: 100%;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 8px;
+      color: #1a1a2e;
+      background: #e8e0d0;
+      border: 2px solid transparent;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .card.selected .card-inner {
+      border-color: #1a1a2e;
+      background: #d4cbbe;
+    }
+
+    /* Solved row colors */
+    .card.solved-0 .card-inner { background: #f9df6d; color: #1a1a2e; }
+    .card.solved-1 .card-inner { background: #a0c35a; color: #1a1a2e; }
+    .card.solved-2 .card-inner { background: #b0c4ef; color: #1a1a2e; }
+    .card.solved-3 .card-inner { background: #ba81c5; color: #fff; }
+
+    .card.solved { cursor: default; pointer-events: none; }
+
+    /* ── Controls ─────────────────────────────────────────────────── */
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    button {
+      padding: 10px 22px;
+      border: 2px solid #1a1a2e;
+      border-radius: 999px;
+      background: transparent;
+      color: #1a1a2e;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    button:hover { background: #1a1a2e; color: #f5f0e8; }
+    button:disabled { opacity: 0.35; pointer-events: none; }
+
+    /* ── Status / message bar ─────────────────────────────────────── */
+    #message {
+      min-height: 1.6em;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #c0392b;
+      text-align: center;
+      transition: opacity 0.3s;
+    }
+
+    /* ── Legend (show category labels for solved rows) ────────────── */
+    #legend {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: min(520px, 100%);
+      font-size: 0.82rem;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.4s, transform 0.4s;
+    }
+    .legend-row.visible { opacity: 1; transform: translateY(0); }
+
+    .legend-swatch {
+      width: 14px; height: 14px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    /* ── Settings panel ───────────────────────────────────────────── */
+    details {
+      width: min(520px, 100%);
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 10px 16px;
+      background: #fff;
+      font-size: 0.85rem;
+      color: #333;
+    }
+    summary { cursor: pointer; font-weight: 600; }
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    label { display: flex; flex-direction: column; gap: 4px; }
+    input[type=range] { width: 100%; }
+    select { padding: 4px; border-radius: 4px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+
+<h1>חיבורים</h1>
+<p class="subtitle">
+  בחרו 4 מילים מאותה קטגוריה ולחצו <strong>שלח</strong>.<br>
+  הכרטיסיות מונפשות בטכניקת FLIP.
+</p>
+
+<!-- Settings -->
+<details>
+  <summary>הגדרות אנימציה</summary>
+  <div class="settings-grid">
+    <label>
+      משך (ms): <span id="duration-val">350</span>
+      <input type="range" id="duration" min="100" max="1200" value="350" step="50" />
+    </label>
+    <label>
+      פיגור (ms/כרטיס): <span id="stagger-val">30</span>
+      <input type="range" id="stagger" min="0" max="150" value="30" step="10" />
+    </label>
+    <label>
+      easing:
+      <select id="easing">
+        <option value="easeInOut" selected>easeInOut</option>
+        <option value="easeIn">easeIn</option>
+        <option value="easeOut">easeOut</option>
+        <option value="linear">linear</option>
+        <option value="backIn">backIn</option>
+        <option value="backOut">backOut</option>
+        <option value="backInOut">backInOut</option>
+        <option value="anticipate">anticipate</option>
+      </select>
+    </label>
+  </div>
+</details>
+
+<!-- Grid -->
+<div id="grid"></div>
+
+<!-- Message -->
+<div id="message"></div>
+
+<!-- Controls -->
+<div class="controls">
+  <button id="btn-submit" disabled>שלח</button>
+  <button id="btn-shuffle">ערבב</button>
+  <button id="btn-reset">התחל מחדש</button>
+</div>
+
+<!-- Category legend (revealed as rows are solved) -->
+<div id="legend"></div>
+
+<script type="module">
+import { wrapGrid } from './grid-animation.js';
+
+// ---------------------------------------------------------------------------
+// Puzzle data
+// ---------------------------------------------------------------------------
+const CATEGORIES = [
+  { label: 'ירקות שורש', words: ['גזר', 'צנון', 'סלק', 'לפת'],           color: 0 },
+  { label: 'כלי מוזיקה', words: ['כינור', 'חליל', 'תוף', 'גיטרה'],       color: 1 },
+  { label: 'עיר בישראל', words: ['חיפה', 'עכו', 'נצרת', 'באר שבע'],      color: 2 },
+  { label: 'כוכבי לכת',  words: ['מאדים', 'נגה', 'שבתאי', 'צדק'],        color: 3 },
+];
+const SWATCHES = ['#f9df6d', '#a0c35a', '#b0c4ef', '#ba81c5'];
+
+// Flat word list: [{ word, categoryIndex }, ...]
+const allWords = CATEGORIES.flatMap((cat, ci) =>
+  cat.words.map(word => ({ word, categoryIndex: ci }))
+);
+
+// ---------------------------------------------------------------------------
+// DOM refs
+// ---------------------------------------------------------------------------
+const gridEl       = document.getElementById('grid');
+const messageEl    = document.getElementById('message');
+const legendEl     = document.getElementById('legend');
+const btnSubmit    = document.getElementById('btn-submit');
+const btnShuffle   = document.getElementById('btn-shuffle');
+const btnReset     = document.getElementById('btn-reset');
+const durInput     = document.getElementById('duration');
+const staggerInput = document.getElementById('stagger');
+const easingInput  = document.getElementById('easing');
+const durVal       = document.getElementById('duration-val');
+const staggerVal   = document.getElementById('stagger-val');
+
+// ---------------------------------------------------------------------------
+// Card elements — created ONCE, reused forever so FLIP can track them
+// ---------------------------------------------------------------------------
+// cardEls[wordIdx] → the persistent <div class="card"> element
+const cardEls = allWords.map(({ word, categoryIndex }, wordIdx) => {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.wordIdx = wordIdx;
+
+  const inner = document.createElement('div');
+  inner.className = 'card-inner';
+  inner.textContent = word;
+  card.appendChild(inner);
+
+  card.addEventListener('click', () => {
+    if (solved.has(categoryIndex)) return;
+    toggleSelect(wordIdx);
+  });
+
+  return card;
+});
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let order    = [];        // wordIdx[] — current left-to-right, top-to-bottom order
+let selected = new Set(); // Set of wordIdx currently selected
+let solved   = new Set(); // Set of categoryIndex that are solved
+let gridController;
+
+// ---------------------------------------------------------------------------
+// Render helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Reorders DOM nodes inside gridEl to match `order[]`.
+ * Moving existing nodes (not recreating) is what triggers FLIP animation.
+ */
+function applyOrder() {
+  order.forEach(wordIdx => gridEl.appendChild(cardEls[wordIdx]));
+}
+
+/** Sync class names on every card to match current state. */
+function syncClasses() {
+  allWords.forEach(({ categoryIndex }, wordIdx) => {
+    const card = cardEls[wordIdx];
+    const isSolved   = solved.has(categoryIndex);
+    const isSelected = selected.has(wordIdx);
+    card.className = [
+      'card',
+      isSelected ? 'selected' : '',
+      isSolved   ? `solved solved-${categoryIndex}` : '',
+    ].filter(Boolean).join(' ');
+  });
+  btnSubmit.disabled = selected.size !== 4;
+}
+
+function buildLegend() {
+  legendEl.innerHTML = '';
+  CATEGORIES.forEach((cat, i) => {
+    const row    = document.createElement('div');
+    row.className = 'legend-row' + (solved.has(i) ? ' visible' : '');
+    const swatch = document.createElement('div');
+    swatch.className = 'legend-swatch';
+    swatch.style.background = SWATCHES[i];
+    const label = document.createElement('span');
+    label.textContent = `${cat.label}: ${cat.words.join(', ')}`;
+    row.append(swatch, label);
+    legendEl.appendChild(row);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Settings / wrapGrid binding
+// ---------------------------------------------------------------------------
+function getSettings() {
+  return {
+    duration : Number(durInput.value),
+    stagger  : Number(staggerInput.value),
+    easing   : easingInput.value,
+  };
+}
+
+function rebindGrid() {
+  if (gridController) gridController.unwrapGrid();
+  gridController = wrapGrid(gridEl, {
+    ...getSettings(),
+    onStart: els => els.forEach(el => { el.style.zIndex = '10'; }),
+    onEnd:   els => els.forEach(el => { el.style.zIndex = '';   }),
+  });
+}
+
+durInput.addEventListener('input',    () => { durVal.textContent     = durInput.value;     rebindGrid(); });
+staggerInput.addEventListener('input',() => { staggerVal.textContent = staggerInput.value; rebindGrid(); });
+easingInput.addEventListener('change', rebindGrid);
+
+// ---------------------------------------------------------------------------
+// Interactions
+// ---------------------------------------------------------------------------
+function toggleSelect(wordIdx) {
+  if (selected.has(wordIdx)) {
+    selected.delete(wordIdx);
+  } else {
+    if (selected.size >= 4) return;
+    selected.add(wordIdx);
+  }
+  syncClasses(); // class-only change — no position change, no animation
+}
+
+function showMessage(text, color = '#c0392b') {
+  messageEl.style.color  = color;
+  messageEl.textContent  = text;
+  setTimeout(() => { messageEl.textContent = ''; }, 2200);
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shuffle button — only reorder unsolved cards
+// ---------------------------------------------------------------------------
+btnShuffle.addEventListener('click', () => {
+  const solvedWordIdxs   = order.filter(wi => solved.has(allWords[wi].categoryIndex));
+  const unsolvedWordIdxs = order.filter(wi => !solved.has(allWords[wi].categoryIndex));
+  shuffle(unsolvedWordIdxs);
+  order = [...solvedWordIdxs, ...unsolvedWordIdxs];
+  selected.clear();
+  syncClasses();
+  applyOrder(); // moves DOM nodes → MutationObserver fires → FLIP animates
+});
+
+// ---------------------------------------------------------------------------
+// Submit button
+// ---------------------------------------------------------------------------
+btnSubmit.addEventListener('click', () => {
+  if (selected.size !== 4) return;
+
+  const selArr     = [...selected];
+  const categories = selArr.map(wi => allWords[wi].categoryIndex);
+  const allSame    = categories.every(c => c === categories[0]);
+
+  if (!allSame) {
+    const counts = {};
+    categories.forEach(c => counts[c] = (counts[c] || 0) + 1);
+    const max = Math.max(...Object.values(counts));
+    showMessage(max === 3 ? 'כמעט! יש לך 3 מתוך 4 נכון 🤏' : 'לא נכון, נסה שוב');
+    selected.clear();
+    syncClasses();
+    return;
+  }
+
+  // Correct guess — move solved cards to the front of order
+  const solvedCount  = solved.size;
+  const categoryIdx  = categories[0];
+  solved.add(categoryIdx);
+
+  // Build new order: solved group at front, rest unchanged
+  const solvedGroup  = order.filter(wi => allWords[wi].categoryIndex === categoryIdx);
+  const remaining    = order.filter(wi => allWords[wi].categoryIndex !== categoryIdx);
+  // Insert this group right after previously solved groups
+  order = [
+    ...remaining.slice(0, solvedCount * 4),  // already-solved groups stay first
+    ...solvedGroup,
+    ...remaining.slice(solvedCount * 4),
+  ];
+
+  selected.clear();
+  syncClasses();  // update classes first (no animation for class change)
+  applyOrder();   // reorder nodes → FLIP animation runs
+  buildLegend();
+
+  showMessage(
+    solved.size === 4 ? '🎉 כל הכבוד, פתרת את הפאזל!' : `✓ ${CATEGORIES[categoryIdx].label}`,
+    '#27ae60'
+  );
+
+  if (solved.size === 4) {
+    btnSubmit.disabled = true;
+    btnShuffle.disabled = true;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Reset
+// ---------------------------------------------------------------------------
+btnReset.addEventListener('click', () => {
+  solved.clear();
+  selected.clear();
+  order = Array.from({ length: allWords.length }, (_, i) => i);
+  shuffle(order);
+  syncClasses();
+  applyOrder();
+  buildLegend();
+  btnSubmit.disabled  = true;
+  btnShuffle.disabled = false;
+  messageEl.textContent = '';
+});
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+order = Array.from({ length: allWords.length }, (_, i) => i);
+shuffle(order);
+applyOrder();   // first paint — no previous snapshots, no animation
+syncClasses();
+buildLegend();
+rebindGrid();   // start observing after initial render
+</script>
+
+</body>
+</html>
